@@ -1,0 +1,564 @@
+blueprint:
+  name: IKEA STYRBAR - on/off, dimming, color cycle, color temp
+  description: >
+    Combined STYRBAR blueprint for Zigbee2MQTT.
+
+    Top/bottom:
+    - short press on/off
+    - hold to brighten/dim
+
+    Side buttons:
+    - left/right click = color cycle backward/forward on RGB targets
+    - left/right hold = warmer/cooler on tunable-white targets
+
+    Use separate target lists so normal white lights and RGB lights don't fight each other.
+  domain: automation
+
+  input:
+    switch_remote:
+      name: STYRBAR remote
+      selector:
+        device:
+          integration: mqtt
+
+    light_targets:
+      name: Lights for on/off + dimming
+      description: These lights react to top/bottom buttons.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    color_targets:
+      name: RGB lights for left/right click
+      description: These lights cycle colors on side-button click.
+      default: []
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    color_temp_targets:
+      name: Tunable white lights for left/right hold
+      description: These lights change color temperature on side-button hold.
+      default: []
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    color_cycle_index:
+      name: Color cycle index helper
+      description: Your input_number helper with min 0 and max 8.
+      selector:
+        entity:
+          domain: input_number
+
+    brightness_step:
+      name: Brightness step (%)
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    delay_ms:
+      name: Brightness delay between steps (ms)
+      default: 250
+      selector:
+        number:
+          min: 20
+          max: 2000
+          step: 10
+          unit_of_measurement: ms
+
+    transition_seconds:
+      name: Transition time (seconds)
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.1
+          unit_of_measurement: s
+
+    min_brightness_pct:
+      name: Minimum brightness (%)
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    max_brightness_pct:
+      name: Maximum brightness (%)
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    color_temp_delay_ms:
+      name: Color temperature delay between steps (ms)
+      default: 100
+      selector:
+        number:
+          min: 20
+          max: 2000
+          step: 10
+          unit_of_measurement: ms
+
+    color_temp_step_kelvin:
+      name: Color temperature step (Kelvin)
+      default: 150
+      selector:
+        number:
+          min: 10
+          max: 500
+          step: 10
+          unit_of_measurement: K
+
+    min_color_temp_kelvin:
+      name: Warmest color temperature (Kelvin)
+      default: 2000
+      selector:
+        number:
+          min: 1000
+          max: 6500
+          step: 100
+          unit_of_measurement: K
+
+    max_color_temp_kelvin:
+      name: Coolest color temperature (Kelvin)
+      default: 6500
+      selector:
+        number:
+          min: 1000
+          max: 6500
+          step: 100
+          unit_of_measurement: K
+
+    color_0:
+      name: Color 0
+      default: [255, 255, 255]
+      selector:
+        color_rgb: {}
+
+    color_1:
+      name: Color 1
+      default: [255, 255, 0]
+      selector:
+        color_rgb: {}
+
+    color_2:
+      name: Color 2
+      default: [255, 165, 0]
+      selector:
+        color_rgb: {}
+
+    color_3:
+      name: Color 3
+      default: [255, 0, 0]
+      selector:
+        color_rgb: {}
+
+    color_4:
+      name: Color 4
+      default: [255, 0, 123]
+      selector:
+        color_rgb: {}
+
+    color_5:
+      name: Color 5
+      default: [153, 0, 255]
+      selector:
+        color_rgb: {}
+
+    color_6:
+      name: Color 6
+      default: [0, 30, 255]
+      selector:
+        color_rgb: {}
+
+    color_7:
+      name: Color 7
+      default: [0, 85, 128]
+      selector:
+        color_rgb: {}
+
+    color_8:
+      name: Color 8
+      default: [0, 255, 42]
+      selector:
+        color_rgb: {}
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: "on"
+    id: light_on
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: "off"
+    id: light_off
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: brightness_move_up
+    id: dim_up
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: brightness_move_down
+    id: dim_down
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: brightness_stop
+    id: dim_stop
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: arrow_left_click
+    id: color_prev
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: arrow_right_click
+    id: color_next
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: arrow_left_hold
+    id: temp_warmer
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: arrow_left_release
+    id: temp_warmer_stop
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: arrow_right_hold
+    id: temp_cooler
+
+  - platform: device
+    device_id: !input switch_remote
+    domain: mqtt
+    type: action
+    subtype: arrow_right_release
+    id: temp_cooler_stop
+
+action:
+  - variables:
+      main_lights: !input light_targets
+      color_lights: !input color_targets
+      temp_lights: !input color_temp_targets
+      color_index_helper: !input color_cycle_index
+
+      brightness_step: !input brightness_step
+      delay_ms: !input delay_ms
+      transition_seconds: !input transition_seconds
+      min_brightness_pct: !input min_brightness_pct
+      max_brightness_pct: !input max_brightness_pct
+
+      color_temp_delay_ms: !input color_temp_delay_ms
+      color_temp_step_kelvin: !input color_temp_step_kelvin
+      min_color_temp_kelvin: !input min_color_temp_kelvin
+      max_color_temp_kelvin: !input max_color_temp_kelvin
+
+      color_list:
+        - !input color_0
+        - !input color_1
+        - !input color_2
+        - !input color_3
+        - !input color_4
+        - !input color_5
+        - !input color_6
+        - !input color_7
+        - !input color_8
+
+      color_list_len: "{{ color_list | count }}"
+
+      brightness_ref: >
+        {% if (main_lights | count) > 0 %}
+          {{ main_lights[0] }}
+        {% else %}
+          {{ '' }}
+        {% endif %}
+
+      temp_ref: >
+        {% if (temp_lights | count) > 0 %}
+          {{ temp_lights[0] }}
+        {% else %}
+          {{ '' }}
+        {% endif %}
+
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: light_on
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input light_targets
+            data:
+              transition: !input transition_seconds
+
+      - conditions:
+          - condition: trigger
+            id: light_off
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: !input light_targets
+            data:
+              transition: !input transition_seconds
+
+      - conditions:
+          - condition: trigger
+            id: dim_up
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ (main_lights | count) > 0 }}"
+            then:
+              - repeat:
+                  sequence:
+                    - variables:
+                        current_pct: >
+                          {% set cur_br = state_attr(brightness_ref, 'brightness') | default(0) | float(0) %}
+                          {{ (cur_br / 2.55) | round(0) }}
+                        start_pct: >
+                          {{ [current_pct, min_brightness_pct] | max }}
+                        new_pct: >
+                          {% set val = start_pct + brightness_step %}
+                          {{ [val, max_brightness_pct] | min }}
+                    - service: light.turn_on
+                      target:
+                        entity_id: !input light_targets
+                      data:
+                        brightness_pct: "{{ new_pct | int }}"
+                        transition: !input transition_seconds
+                    - wait_for_trigger:
+                        - platform: device
+                          device_id: !input switch_remote
+                          domain: mqtt
+                          type: action
+                          subtype: brightness_stop
+                      timeout:
+                        milliseconds: !input delay_ms
+                      continue_on_timeout: true
+                  until:
+                    - condition: template
+                      value_template: "{{ wait.trigger is not none }}"
+                    - condition: template
+                      value_template: >
+                        {% set cur_br = state_attr(brightness_ref, 'brightness') | default(0) | float(0) %}
+                        {{ (cur_br / 2.55) >= max_brightness_pct }}
+
+      - conditions:
+          - condition: trigger
+            id: dim_down
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ (main_lights | count) > 0 }}"
+            then:
+              - repeat:
+                  sequence:
+                    - variables:
+                        current_pct: >
+                          {% set cur_br = state_attr(brightness_ref, 'brightness') | default(255) | float(255) %}
+                          {{ (cur_br / 2.55) | round(0) }}
+                        start_pct: >
+                          {{ [current_pct, max_brightness_pct] | min }}
+                        new_pct: >
+                          {% set val = start_pct - brightness_step %}
+                          {{ [val, min_brightness_pct] | max }}
+                    - service: light.turn_on
+                      target:
+                        entity_id: !input light_targets
+                      data:
+                        brightness_pct: "{{ new_pct | int }}"
+                        transition: !input transition_seconds
+                    - wait_for_trigger:
+                        - platform: device
+                          device_id: !input switch_remote
+                          domain: mqtt
+                          type: action
+                          subtype: brightness_stop
+                      timeout:
+                        milliseconds: !input delay_ms
+                      continue_on_timeout: true
+                  until:
+                    - condition: template
+                      value_template: "{{ wait.trigger is not none }}"
+                    - condition: template
+                      value_template: >
+                        {% set cur_br = state_attr(brightness_ref, 'brightness') | default(255) | float(255) %}
+                        {{ (cur_br / 2.55) <= min_brightness_pct }}
+
+      - conditions:
+          - condition: trigger
+            id: color_next
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ (color_lights | count) > 0 }}"
+            then:
+              - variables:
+                  current_index: "{{ states(color_index_helper) | int(0) }}"
+                  new_index: >
+                    {% if current_index >= ((color_list_len | int) - 1) %}
+                      0
+                    {% else %}
+                      {{ current_index + 1 }}
+                    {% endif %}
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ color_index_helper }}"
+                data:
+                  value: "{{ new_index | int }}"
+              - service: light.turn_on
+                target:
+                  entity_id: !input color_targets
+                data:
+                  rgb_color: "{{ color_list[new_index | int] }}"
+                  transition: !input transition_seconds
+
+      - conditions:
+          - condition: trigger
+            id: color_prev
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ (color_lights | count) > 0 }}"
+            then:
+              - variables:
+                  current_index: "{{ states(color_index_helper) | int(0) }}"
+                  new_index: >
+                    {% if current_index == 0 %}
+                      {{ (color_list_len | int) - 1 }}
+                    {% else %}
+                      {{ current_index - 1 }}
+                    {% endif %}
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ color_index_helper }}"
+                data:
+                  value: "{{ new_index | int }}"
+              - service: light.turn_on
+                target:
+                  entity_id: !input color_targets
+                data:
+                  rgb_color: "{{ color_list[new_index | int] }}"
+                  transition: !input transition_seconds
+
+      - conditions:
+          - condition: trigger
+            id: temp_warmer
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ (temp_lights | count) > 0 }}"
+            then:
+              - repeat:
+                  sequence:
+                    - variables:
+                        cur_temp: >
+                          {{ state_attr(temp_ref, 'color_temp_kelvin') | int(max_color_temp_kelvin) }}
+                        new_temp: >
+                          {% set val = cur_temp - color_temp_step_kelvin %}
+                          {{ [val, min_color_temp_kelvin] | max }}
+                    - service: light.turn_on
+                      target:
+                        entity_id: !input color_temp_targets
+                      data:
+                        color_temp_kelvin: "{{ new_temp | int }}"
+                        transition: !input transition_seconds
+                    - wait_for_trigger:
+                        - platform: device
+                          device_id: !input switch_remote
+                          domain: mqtt
+                          type: action
+                          subtype: arrow_left_release
+                      timeout:
+                        milliseconds: !input color_temp_delay_ms
+                      continue_on_timeout: true
+                  until:
+                    - condition: template
+                      value_template: "{{ wait.trigger is not none }}"
+                    - condition: template
+                      value_template: >
+                        {% set cur_temp = state_attr(temp_ref, 'color_temp_kelvin') | int(max_color_temp_kelvin) %}
+                        {{ cur_temp <= min_color_temp_kelvin }}
+
+      - conditions:
+          - condition: trigger
+            id: temp_cooler
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ (temp_lights | count) > 0 }}"
+            then:
+              - repeat:
+                  sequence:
+                    - variables:
+                        cur_temp: >
+                          {{ state_attr(temp_ref, 'color_temp_kelvin') | int(min_color_temp_kelvin) }}
+                        new_temp: >
+                          {% set val = cur_temp + color_temp_step_kelvin %}
+                          {{ [val, max_color_temp_kelvin] | min }}
+                    - service: light.turn_on
+                      target:
+                        entity_id: !input color_temp_targets
+                      data:
+                        color_temp_kelvin: "{{ new_temp | int }}"
+                        transition: !input transition_seconds
+                    - wait_for_trigger:
+                        - platform: device
+                          device_id: !input switch_remote
+                          domain: mqtt
+                          type: action
+                          subtype: arrow_right_release
+                      timeout:
+                        milliseconds: !input color_temp_delay_ms
+                      continue_on_timeout: true
+                  until:
+                    - condition: template
+                      value_template: "{{ wait.trigger is not none }}"
+                    - condition: template
+                      value_template: >
+                        {% set cur_temp = state_attr(temp_ref, 'color_temp_kelvin') | int(min_color_temp_kelvin) %}
+                        {{ cur_temp >= max_color_temp_kelvin }}
