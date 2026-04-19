@@ -1,26 +1,24 @@
 blueprint:
-  name: Philips Hue Dimmer v2 - Simple STYRBAR Style (Zigbee2MQTT)
+  name: Philips Hue Dimmer v2 - Simple Device Trigger + Scene Cycle
   description: >
-    Simple Philips Hue Dimmer v2 blueprint for Zigbee2MQTT.
-
-    Select the remote ACTION SENSOR entity (for example sensor.hue_dimmer_action).
+    Philips Hue Dimmer v2 for Zigbee2MQTT using MQTT device triggers.
 
     Buttons:
-    - Power button single press: toggle lights on/off
-    - Power button double press: toggle warm/cold white
+    - Power single press: toggle lights on/off
+    - Power double press: toggle warm/cold white
     - Brightness up/down short press: step brightness
     - Brightness up/down hold: keep dimming until release
-    - Hue button: cycle through built-in color scenes using an input_number helper
+    - Hue button: cycle through selected Home Assistant scenes
 
   domain: automation
 
   input:
-    remote:
-      name: Remote
-      description: Select the Zigbee2MQTT action sensor of the Hue dimmer.
+    remote_device:
+      name: Remote device
+      description: Select the Philips Hue dimmer device itself.
       selector:
-        entity:
-          domain: sensor
+        device:
+          integration: mqtt
 
     target_lights:
       name: Target lights
@@ -29,9 +27,20 @@ blueprint:
           domain: light
           multiple: true
 
+    color_scenes:
+      name: Color scenes
+      description: >
+        Select the scenes you want the Hue button to cycle through,
+        in the order you want.
+      default: []
+      selector:
+        entity:
+          domain: scene
+          multiple: true
+
     scene_index_helper:
       name: Scene index helper
-      description: Input Number helper used to remember the current color scene index.
+      description: Input Number helper used to remember the next scene index.
       selector:
         entity:
           domain: input_number
@@ -100,52 +109,63 @@ mode: restart
 max_exceeded: silent
 
 variables:
-  remote: !input remote
   target_lights: !input target_lights
+  color_scenes: !input color_scenes
   scene_index_helper: !input scene_index_helper
   short_step_pct: !input short_step_pct
   hold_step_pct: !input hold_step_pct
-  hold_delay_ms: !input hold_delay_ms
   warm_kelvin: !input warm_kelvin
   cold_kelvin: !input cold_kelvin
 
 trigger:
-  - platform: state
-    entity_id: !input remote
-    to: "on_press"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: on_press_release
     id: power_press
 
-  - platform: state
-    entity_id: !input remote
-    to: "up_press"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: up_press_release
     id: up_press
 
-  - platform: state
-    entity_id: !input remote
-    to: "up_hold"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: up_hold
     id: up_hold
 
-  - platform: state
-    entity_id: !input remote
-    to: "down_press"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: down_press_release
     id: down_press
 
-  - platform: state
-    entity_id: !input remote
-    to: "down_hold"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: down_hold
     id: down_hold
 
-  - platform: state
-    entity_id: !input remote
-    to: "recall_0"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: recall_0
     id: hue_scene
 
-  - platform: state
-    entity_id: !input remote
-    to: "recall_1"
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: recall_1
     id: hue_scene
-
-condition: []
 
 action:
   - choose:
@@ -154,9 +174,11 @@ action:
             id: power_press
         sequence:
           - wait_for_trigger:
-              - platform: state
-                entity_id: !input remote
-                to: "on_press"
+              - platform: device
+                domain: mqtt
+                device_id: !input remote_device
+                type: action
+                subtype: on_press_release
             timeout:
               milliseconds: !input double_tap_window_ms
             continue_on_timeout: true
@@ -178,7 +200,7 @@ action:
                         {% else %}
                           {{ warm_kelvin | int }}
                         {% endif %}
-                  - action: light.turn_on
+                  - service: light.turn_on
                     target:
                       entity_id: !input target_lights
                     data:
@@ -188,7 +210,7 @@ action:
                   - condition: template
                     value_template: "{{ wait.trigger is none }}"
                 sequence:
-                  - action: light.toggle
+                  - service: light.toggle
                     target:
                       entity_id: !input target_lights
 
@@ -196,7 +218,7 @@ action:
           - condition: trigger
             id: up_press
         sequence:
-          - action: light.turn_on
+          - service: light.turn_on
             target:
               entity_id: !input target_lights
             data:
@@ -206,7 +228,7 @@ action:
           - condition: trigger
             id: down_press
         sequence:
-          - action: light.turn_on
+          - service: light.turn_on
             target:
               entity_id: !input target_lights
             data:
@@ -217,111 +239,80 @@ action:
             id: up_hold
         sequence:
           - repeat:
-              while:
-                - condition: template
-                  value_template: "{{ states(remote) == 'up_hold' }}"
               sequence:
-                - action: light.turn_on
+                - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
                     brightness_step_pct: "{{ hold_step_pct | int }}"
-                - delay:
+
+                - wait_for_trigger:
+                    - platform: device
+                      domain: mqtt
+                      device_id: !input remote_device
+                      type: action
+                      subtype: up_hold_release
+                  timeout:
                     milliseconds: !input hold_delay_ms
+                  continue_on_timeout: true
+              until:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none }}"
 
       - conditions:
           - condition: trigger
             id: down_hold
         sequence:
           - repeat:
-              while:
-                - condition: template
-                  value_template: "{{ states(remote) == 'down_hold' }}"
               sequence:
-                - action: light.turn_on
+                - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
                     brightness_step_pct: "{{ 0 - (hold_step_pct | int) }}"
-                - delay:
+
+                - wait_for_trigger:
+                    - platform: device
+                      domain: mqtt
+                      device_id: !input remote_device
+                      type: action
+                      subtype: down_hold_release
+                  timeout:
                     milliseconds: !input hold_delay_ms
+                  continue_on_timeout: true
+              until:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none }}"
 
       - conditions:
           - condition: trigger
             id: hue_scene
         sequence:
           - variables:
+              scene_count: "{{ color_scenes | count }}"
               current_index: "{{ states(scene_index_helper) | int(0) }}"
-              color_index: "{{ current_index % 6 }}"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ color_index | int == 0 }}"
-                sequence:
-                  - action: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      kelvin: 2200
-                      brightness_pct: 100
+              selected_scene: >-
+                {% if (color_scenes | count) > 0 %}
+                  {{ color_scenes[current_index % (color_scenes | count)] }}
+                {% else %}
+                  none
+                {% endif %}
+              next_index: >-
+                {% if (color_scenes | count) > 0 %}
+                  {{ (current_index + 1) % (color_scenes | count) }}
+                {% else %}
+                  0
+                {% endif %}
 
-              - conditions:
-                  - condition: template
-                    value_template: "{{ color_index | int == 1 }}"
-                sequence:
-                  - action: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      kelvin: 6500
-                      brightness_pct: 100
+          - condition: template
+            value_template: "{{ scene_count | int > 0 }}"
 
-              - conditions:
-                  - condition: template
-                    value_template: "{{ color_index | int == 2 }}"
-                sequence:
-                  - action: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      rgb_color: [255, 140, 60]
-                      brightness_pct: 100
+          - service: scene.turn_on
+            target:
+              entity_id: "{{ selected_scene }}"
 
-              - conditions:
-                  - condition: template
-                    value_template: "{{ color_index | int == 3 }}"
-                sequence:
-                  - action: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      rgb_color: [255, 70, 70]
-                      brightness_pct: 100
-
-              - conditions:
-                  - condition: template
-                    value_template: "{{ color_index | int == 4 }}"
-                sequence:
-                  - action: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      rgb_color: [70, 200, 255]
-                      brightness_pct: 100
-
-              - conditions:
-                  - condition: template
-                    value_template: "{{ color_index | int == 5 }}"
-                sequence:
-                  - action: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      rgb_color: [180, 90, 255]
-                      brightness_pct: 100
-
-          - action: input_number.set_value
+          - service: input_number.set_value
             target:
               entity_id: !input scene_index_helper
             data:
-              value: "{{ (current_index + 1) % 6 }}"
+              value: "{{ next_index }}"
