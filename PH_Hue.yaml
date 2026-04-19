@@ -9,13 +9,12 @@ blueprint:
     - Brightness up/down short press: step brightness
     - Brightness up/down hold: keep dimming until release
     - Hue button: cycle through configurable colors using an input_number helper
-
   domain: automation
 
   input:
     mqtt_topic:
       name: Zigbee2MQTT topic
-      description: Example: zigbee2mqtt/ph_controle_01
+      description: "Example: zigbee2mqtt/ph_controle_01"
       selector:
         text:
 
@@ -28,7 +27,7 @@ blueprint:
 
     color_index_helper:
       name: Color index helper
-      description: Input Number helper used to remember the current color index
+      description: "Input Number helper used to remember the current color index"
       selector:
         entity:
           domain: input_number
