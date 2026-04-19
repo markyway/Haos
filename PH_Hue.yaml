@@ -1,6 +1,6 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple
-  description: "Simple Philips Hue Dimmer blueprint for Zigbee2MQTT"
+  name: Philips Hue Dimmer v2 Simple Stable
+  description: "Stable Philips Hue Dimmer blueprint for Zigbee2MQTT"
   domain: automation
 
   input:
@@ -35,7 +35,7 @@ blueprint:
 
     hold_step_pct:
       name: Hold brightness step
-      default: 25
+      default: 20
       selector:
         number:
           min: 1
@@ -45,7 +45,7 @@ blueprint:
 
     hold_delay_ms:
       name: Hold repeat delay
-      default: 200
+      default: 180
       selector:
         number:
           min: 100
@@ -107,7 +107,7 @@ blueprint:
       selector:
         color_rgb:
 
-mode: single
+mode: restart
 max_exceeded: silent
 
 variables:
@@ -176,14 +176,19 @@ action:
             id: up_press
         sequence:
           - variables:
-              first_light: >-
-                {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
-              current_brightness: >-
-                {{ state_attr(first_light, 'brightness') | int(0) }}
-              step_brightness: >-
-                {{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}
-              new_brightness: >-
-                {{ [current_brightness + step_brightness, 255] | min }}
+              reference_light: >-
+                {% set on_lights = expand(target_lights)
+                  | selectattr('state', 'eq', 'on')
+                  | map(attribute='entity_id')
+                  | list %}
+                {% if on_lights | count > 0 %}
+                  {{ on_lights | first }}
+                {% else %}
+                  {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
+                {% endif %}
+              current_brightness: "{{ state_attr(reference_light, 'brightness') | int(0) }}"
+              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
+              new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -204,12 +209,9 @@ action:
           - condition: template
             value_template: "{{ first_on_light is not none }}"
           - variables:
-              current_brightness: >-
-                {{ state_attr(first_on_light, 'brightness') | int(1) }}
-              step_brightness: >-
-                {{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}
-              new_brightness: >-
-                {{ [current_brightness - step_brightness, 1] | max }}
+              current_brightness: "{{ state_attr(first_on_light, 'brightness') | int(1) }}"
+              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
+              new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -223,14 +225,19 @@ action:
           - repeat:
               sequence:
                 - variables:
-                    first_light: >-
-                      {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
-                    current_brightness: >-
-                      {{ state_attr(first_light, 'brightness') | int(0) }}
-                    step_brightness: >-
-                      {{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}
-                    new_brightness: >-
-                      {{ [current_brightness + step_brightness, 255] | min }}
+                    reference_light: >-
+                      {% set on_lights = expand(target_lights)
+                        | selectattr('state', 'eq', 'on')
+                        | map(attribute='entity_id')
+                        | list %}
+                      {% if on_lights | count > 0 %}
+                        {{ on_lights | first }}
+                      {% else %}
+                        {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
+                      {% endif %}
+                    current_brightness: "{{ state_attr(reference_light, 'brightness') | int(0) }}"
+                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
+                    new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
@@ -271,12 +278,9 @@ action:
                          | map(attribute='entity_id')
                          | list
                          | first }}
-                    current_brightness: >-
-                      {{ state_attr(loop_first_on_light, 'brightness') | int(1) }}
-                    step_brightness: >-
-                      {{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}
-                    new_brightness: >-
-                      {{ [current_brightness - step_brightness, 1] | max }}
+                    current_brightness: "{{ state_attr(loop_first_on_light, 'brightness') | int(1) }}"
+                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
+                    new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
