@@ -1,6 +1,6 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple Stable +
-  description: "Stable Philips Hue Dimmer blueprint for Zigbee2MQTT with color cycle and color temperature sweep"
+  name: Philips Hue Dimmer v2 Simple Stable ++
+  description: "Stable Philips Hue Dimmer blueprint for Zigbee2MQTT with color cycle, color temperature sweep, and minimum brightness protection"
   domain: automation
 
   input:
@@ -35,7 +35,17 @@ blueprint:
 
     hold_step_pct:
       name: Hold brightness step %
-      default: 20
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+          unit_of_measurement: "%"
+
+    min_brightness_pct:
+      name: Minimum brightness %
+      default: 10
       selector:
         number:
           min: 1
@@ -45,10 +55,10 @@ blueprint:
 
     hold_delay_ms:
       name: Hold brightness speed
-      default: 180
+      default: 140
       selector:
         number:
-          min: 100
+          min: 80
           max: 1000
           step: 10
           unit_of_measurement: ms
@@ -84,10 +94,10 @@ blueprint:
 
     ct_delay_ms:
       name: Color temperature speed
-      default: 300
+      default: 260
       selector:
         number:
-          min: 100
+          min: 80
           max: 1500
           step: 10
           unit_of_measurement: ms
@@ -154,6 +164,7 @@ variables:
   color_index_helper: !input color_index_helper
   short_step_pct: !input short_step_pct
   hold_step_pct: !input hold_step_pct
+  min_brightness_pct: !input min_brightness_pct
   warm_kelvin: !input warm_kelvin
   cold_kelvin: !input cold_kelvin
   ct_steps: !input ct_steps
@@ -227,28 +238,33 @@ action:
           - repeat:
               sequence:
                 - variables:
-                    span: "{{ (ct_steps | int) - 1 }}"
-                    cycle_len: "{{ ((ct_steps | int) - 1) * 2 }}"
-                    phase: "{{ (repeat.index - 1) % cycle_len }}"
+                    step_count: "{{ [ct_steps | int, 2] | max }}"
+                    max_index: "{{ step_count - 1 }}"
+                    phase: "{{ (repeat.index - 1) % (max_index * 2) }}"
                     step_index: >-
-                      {% set s = (ct_steps | int) - 1 %}
-                      {% set p = (repeat.index - 1) % (s * 2) %}
-                      {% if p <= s %}
+                      {% set m = max_index | int %}
+                      {% set p = phase | int %}
+                      {% if p <= m %}
                         {{ p }}
                       {% else %}
-                        {{ (s * 2) - p }}
+                        {{ (m * 2) - p }}
                       {% endif %}
                     kelvin_value: >-
                       {% set warm = warm_kelvin | int %}
                       {% set cold = cold_kelvin | int %}
-                      {% set s = (ct_steps | int) - 1 %}
+                      {% set m = max_index | int %}
                       {% set idx = step_index | int %}
-                      {{ (warm + ((cold - warm) * idx / s)) | round(0) | int }}
+                      {% if m <= 0 %}
+                        {{ warm }}
+                      {% else %}
+                        {{ (warm + ((cold - warm) * idx / m)) | round(0) | int }}
+                      {% endif %}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
                     color_temp_kelvin: "{{ kelvin_value }}"
+                    transition: 0
                 - wait_for_trigger:
                     - platform: device
                       domain: mqtt
@@ -277,14 +293,16 @@ action:
                 {% else %}
                   {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
                 {% endif %}
-              current_brightness: "{{ state_attr(reference_light, 'brightness') | int(0) }}"
-              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
-              new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
+              current_pct: >-
+                {{ ((state_attr(reference_light, 'brightness') | int(0)) / 2.55) | round(0) | int }}
+              new_pct: >-
+                {{ [current_pct + (short_step_pct | int), 100] | min }}
           - service: light.turn_on
             target:
               entity_id: !input target_lights
             data:
-              brightness: "{{ new_brightness }}"
+              brightness_pct: "{{ new_pct }}"
+              transition: 0
 
       - conditions:
           - condition: trigger
@@ -300,14 +318,16 @@ action:
           - condition: template
             value_template: "{{ first_on_light is not none }}"
           - variables:
-              current_brightness: "{{ state_attr(first_on_light, 'brightness') | int(1) }}"
-              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
-              new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
+              current_pct: >-
+                {{ ((state_attr(first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
+              new_pct: >-
+                {{ [current_pct - (short_step_pct | int), min_brightness_pct | int] | max }}
           - service: light.turn_on
             target:
               entity_id: !input target_lights
             data:
-              brightness: "{{ new_brightness }}"
+              brightness_pct: "{{ new_pct }}"
+              transition: 0
 
       - conditions:
           - condition: trigger
@@ -326,14 +346,16 @@ action:
                       {% else %}
                         {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
                       {% endif %}
-                    current_brightness: "{{ state_attr(reference_light, 'brightness') | int(0) }}"
-                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
-                    new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
+                    current_pct: >-
+                      {{ ((state_attr(reference_light, 'brightness') | int(0)) / 2.55) | round(0) | int }}
+                    new_pct: >-
+                      {{ [current_pct + (hold_step_pct | int), 100] | min }}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
-                    brightness: "{{ new_brightness }}"
+                    brightness_pct: "{{ new_pct }}"
+                    transition: 0
                 - wait_for_trigger:
                     - platform: device
                       domain: mqtt
@@ -369,14 +391,16 @@ action:
                          | map(attribute='entity_id')
                          | list
                          | first }}
-                    current_brightness: "{{ state_attr(loop_first_on_light, 'brightness') | int(1) }}"
-                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
-                    new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
+                    current_pct: >-
+                      {{ ((state_attr(loop_first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
+                    new_pct: >-
+                      {{ [current_pct - (hold_step_pct | int), min_brightness_pct | int] | max }}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
-                    brightness: "{{ new_brightness }}"
+                    brightness_pct: "{{ new_pct }}"
+                    transition: 0
                 - wait_for_trigger:
                     - platform: device
                       domain: mqtt
@@ -408,6 +432,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_0
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -418,6 +443,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_1
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -428,6 +454,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_2
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -438,6 +465,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_3
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -448,6 +476,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_4
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -458,6 +487,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_5
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -468,6 +498,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_6
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -478,6 +509,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_7
+                      transition: 0
 
               - conditions:
                   - condition: template
@@ -488,6 +520,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       rgb_color: !input color_8
+                      transition: 0
 
           - service: input_number.set_value
             target:
