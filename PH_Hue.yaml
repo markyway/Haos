@@ -1,6 +1,6 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple Stable
-  description: "Stable Philips Hue Dimmer blueprint for Zigbee2MQTT"
+  name: Philips Hue Dimmer v2 Simple Stable +
+  description: "Stable Philips Hue Dimmer blueprint for Zigbee2MQTT with color cycle and color temperature sweep"
   domain: automation
 
   input:
@@ -24,7 +24,7 @@ blueprint:
           domain: input_number
 
     short_step_pct:
-      name: Short press brightness step
+      name: Brightness step %
       default: 12
       selector:
         number:
@@ -34,7 +34,7 @@ blueprint:
           unit_of_measurement: "%"
 
     hold_step_pct:
-      name: Hold brightness step
+      name: Hold brightness step %
       default: 20
       selector:
         number:
@@ -44,12 +44,51 @@ blueprint:
           unit_of_measurement: "%"
 
     hold_delay_ms:
-      name: Hold repeat delay
+      name: Hold brightness speed
       default: 180
       selector:
         number:
           min: 100
           max: 1000
+          step: 10
+          unit_of_measurement: ms
+
+    warm_kelvin:
+      name: Warm color temperature
+      default: 2200
+      selector:
+        number:
+          min: 1800
+          max: 4000
+          step: 100
+          unit_of_measurement: K
+
+    cold_kelvin:
+      name: Cold color temperature
+      default: 6500
+      selector:
+        number:
+          min: 3000
+          max: 7000
+          step: 100
+          unit_of_measurement: K
+
+    ct_steps:
+      name: Color temperature steps
+      default: 12
+      selector:
+        number:
+          min: 2
+          max: 50
+          step: 1
+
+    ct_delay_ms:
+      name: Color temperature speed
+      default: 300
+      selector:
+        number:
+          min: 100
+          max: 1500
           step: 10
           unit_of_measurement: ms
 
@@ -115,6 +154,9 @@ variables:
   color_index_helper: !input color_index_helper
   short_step_pct: !input short_step_pct
   hold_step_pct: !input hold_step_pct
+  warm_kelvin: !input warm_kelvin
+  cold_kelvin: !input cold_kelvin
+  ct_steps: !input ct_steps
 
 trigger:
   - platform: device
@@ -123,6 +165,13 @@ trigger:
     type: action
     subtype: on_press_release
     id: toggle
+
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: on_hold
+    id: ct_cycle
 
   - platform: device
     domain: mqtt
@@ -170,6 +219,48 @@ action:
           - service: light.toggle
             target:
               entity_id: !input target_lights
+
+      - conditions:
+          - condition: trigger
+            id: ct_cycle
+        sequence:
+          - repeat:
+              sequence:
+                - variables:
+                    span: "{{ (ct_steps | int) - 1 }}"
+                    cycle_len: "{{ ((ct_steps | int) - 1) * 2 }}"
+                    phase: "{{ (repeat.index - 1) % cycle_len }}"
+                    step_index: >-
+                      {% set s = (ct_steps | int) - 1 %}
+                      {% set p = (repeat.index - 1) % (s * 2) %}
+                      {% if p <= s %}
+                        {{ p }}
+                      {% else %}
+                        {{ (s * 2) - p }}
+                      {% endif %}
+                    kelvin_value: >-
+                      {% set warm = warm_kelvin | int %}
+                      {% set cold = cold_kelvin | int %}
+                      {% set s = (ct_steps | int) - 1 %}
+                      {% set idx = step_index | int %}
+                      {{ (warm + ((cold - warm) * idx / s)) | round(0) | int }}
+                - service: light.turn_on
+                  target:
+                    entity_id: !input target_lights
+                  data:
+                    color_temp_kelvin: "{{ kelvin_value }}"
+                - wait_for_trigger:
+                    - platform: device
+                      domain: mqtt
+                      device_id: !input remote_device
+                      type: action
+                      subtype: on_hold_release
+                  timeout:
+                    milliseconds: !input ct_delay_ms
+                  continue_on_timeout: true
+              until:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none }}"
 
       - conditions:
           - condition: trigger
