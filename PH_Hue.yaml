@@ -1,20 +1,11 @@
 blueprint:
-  name: Philips Hue Dimmer v2 - Simple MQTT Toggle + Color Cycle
-  description: >
-    Simple Philips Hue Dimmer v2 blueprint for Zigbee2MQTT.
-
-    Behavior:
-    - On button: toggle lights on/off
-    - Off button: toggle lights on/off
-    - Brightness up/down short press: step brightness
-    - Brightness up/down hold: keep dimming until release
-    - Hue button: cycle through configurable colors using an input_number helper
+  name: Philips Hue Dimmer v2 Simple MQTT
+  description: Simple Philips Hue Dimmer blueprint for Zigbee2MQTT
   domain: automation
 
   input:
     mqtt_topic:
       name: Zigbee2MQTT topic
-      description: "Example: zigbee2mqtt/ph_controle_01"
       selector:
         text:
 
@@ -27,7 +18,6 @@ blueprint:
 
     color_index_helper:
       name: Color index helper
-      description: "Input Number helper used to remember the current color index"
       selector:
         entity:
           domain: input_number
@@ -131,13 +121,13 @@ trigger:
     topic: !input mqtt_topic
     payload: "on_press_release"
     value_template: "{{ value_json.action }}"
-    id: toggle_on
+    id: on_toggle
 
   - platform: mqtt
     topic: !input mqtt_topic
     payload: "off_press_release"
     value_template: "{{ value_json.action }}"
-    id: toggle_off
+    id: off_toggle
 
   - platform: mqtt
     topic: !input mqtt_topic
@@ -179,9 +169,15 @@ action:
   - choose:
       - conditions:
           - condition: trigger
-            id:
-              - toggle_on
-              - toggle_off
+            id: on_toggle
+        sequence:
+          - service: light.toggle
+            target:
+              entity_id: !input target_lights
+
+      - conditions:
+          - condition: trigger
+            id: off_toggle
         sequence:
           - service: light.toggle
             target:
@@ -192,10 +188,14 @@ action:
             id: up_press
         sequence:
           - variables:
-              first_light: "{{ expand(target_lights) | map(attribute='entity_id') | list | first }}"
-              current_brightness: "{{ state_attr(first_light, 'brightness') | int(0) }}"
-              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
-              new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
+              first_light: >-
+                {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
+              current_brightness: >-
+                {{ state_attr(first_light, 'brightness') | int(0) }}
+              step_brightness: >-
+                {{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}
+              new_brightness: >-
+                {{ [current_brightness + step_brightness, 255] | min }}
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -216,9 +216,12 @@ action:
           - condition: template
             value_template: "{{ first_on_light is not none }}"
           - variables:
-              current_brightness: "{{ state_attr(first_on_light, 'brightness') | int(1) }}"
-              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
-              new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
+              current_brightness: >-
+                {{ state_attr(first_on_light, 'brightness') | int(1) }}
+              step_brightness: >-
+                {{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}
+              new_brightness: >-
+                {{ [current_brightness - step_brightness, 1] | max }}
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -232,10 +235,14 @@ action:
           - repeat:
               sequence:
                 - variables:
-                    first_light: "{{ expand(target_lights) | map(attribute='entity_id') | list | first }}"
-                    current_brightness: "{{ state_attr(first_light, 'brightness') | int(0) }}"
-                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
-                    new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
+                    first_light: >-
+                      {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
+                    current_brightness: >-
+                      {{ state_attr(first_light, 'brightness') | int(0) }}
+                    step_brightness: >-
+                      {{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}
+                    new_brightness: >-
+                      {{ [current_brightness + step_brightness, 255] | min }}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
@@ -275,9 +282,12 @@ action:
                          | map(attribute='entity_id')
                          | list
                          | first }}
-                    current_brightness: "{{ state_attr(loop_first_on_light, 'brightness') | int(1) }}"
-                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
-                    new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
+                    current_brightness: >-
+                      {{ state_attr(loop_first_on_light, 'brightness') | int(1) }}
+                    step_brightness: >-
+                      {{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}
+                    new_brightness: >-
+                      {{ [current_brightness - step_brightness, 1] | max }}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
@@ -302,11 +312,10 @@ action:
           - variables:
               current_index: "{{ states(color_index_helper) | int(0) }}"
               color_index: "{{ current_index % 9 }}"
-
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 0 }}"
+                    value_template: "{{ color_index | int == 0 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -316,7 +325,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 1 }}"
+                    value_template: "{{ color_index | int == 1 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -326,7 +335,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 2 }}"
+                    value_template: "{{ color_index | int == 2 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -336,7 +345,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 3 }}"
+                    value_template: "{{ color_index | int == 3 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -346,7 +355,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 4 }}"
+                    value_template: "{{ color_index | int == 4 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -356,7 +365,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 5 }}"
+                    value_template: "{{ color_index | int == 5 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -366,7 +375,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 6 }}"
+                    value_template: "{{ color_index | int == 6 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -376,7 +385,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 7 }}"
+                    value_template: "{{ color_index | int == 7 }}"
                 sequence:
                   - service: light.turn_on
                     target:
@@ -386,7 +395,7 @@ action:
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index == 8 }}"
+                    value_template: "{{ color_index | int == 8 }}"
                 sequence:
                   - service: light.turn_on
                     target:
