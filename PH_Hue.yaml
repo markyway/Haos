@@ -1,9 +1,15 @@
 blueprint:
   name: Philips Hue Dimmer v2 Simple
-  description: Simple Philips Hue Dimmer blueprint for Zigbee2MQTT
+  description: "Simple Philips Hue Dimmer blueprint for Zigbee2MQTT"
   domain: automation
 
   input:
+    remote_device:
+      name: Remote device
+      selector:
+        device:
+          integration: mqtt
+
     target_lights:
       name: Target lights
       selector:
@@ -111,52 +117,57 @@ variables:
   hold_step_pct: !input hold_step_pct
   hold_delay_ms: !input hold_delay_ms
 
+trigger_variables:
+  remote_device: !input remote_device
+  remote_name: "{{ device_attr(remote_device, 'name_by_user') or device_attr(remote_device, 'name') }}"
+  mqtt_topic: "{{ 'zigbee2mqtt/' ~ remote_name }}"
+
 trigger:
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: on_press_release
+    topic: "{{ mqtt_topic }}"
+    payload: "on_press_release"
     value_template: "{{ value_json.action }}"
     id: on_toggle
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: off_press_release
+    topic: "{{ mqtt_topic }}"
+    payload: "off_press_release"
     value_template: "{{ value_json.action }}"
     id: off_toggle
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: up_press_release
+    topic: "{{ mqtt_topic }}"
+    payload: "up_press_release"
     value_template: "{{ value_json.action }}"
     id: up_press
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: down_press_release
+    topic: "{{ mqtt_topic }}"
+    payload: "down_press_release"
     value_template: "{{ value_json.action }}"
     id: down_press
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: up_hold
+    topic: "{{ mqtt_topic }}"
+    payload: "up_hold"
     value_template: "{{ value_json.action }}"
     id: up_hold
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: down_hold
+    topic: "{{ mqtt_topic }}"
+    payload: "down_hold"
     value_template: "{{ value_json.action }}"
     id: down_hold
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: recall_0
+    topic: "{{ mqtt_topic }}"
+    payload: "recall_0"
     value_template: "{{ value_json.action }}"
     id: hue_cycle
 
   - platform: mqtt
-    topic: zigbee2mqtt/ph_controle_01
-    payload: recall_1
+    topic: "{{ mqtt_topic }}"
+    payload: "recall_1"
     value_template: "{{ value_json.action }}"
     id: hue_cycle
 
@@ -177,14 +188,10 @@ action:
             id: up_press
         sequence:
           - variables:
-              first_light: >-
-                {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
-              current_brightness: >-
-                {{ state_attr(first_light, 'brightness') | int(0) }}
-              step_brightness: >-
-                {{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}
-              new_brightness: >-
-                {{ [current_brightness + step_brightness, 255] | min }}
+              first_light: "{{ expand(target_lights) | map(attribute='entity_id') | list | first }}"
+              current_brightness: "{{ state_attr(first_light, 'brightness') | int(0) }}"
+              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
+              new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -205,12 +212,9 @@ action:
           - condition: template
             value_template: "{{ first_on_light is not none }}"
           - variables:
-              current_brightness: >-
-                {{ state_attr(first_on_light, 'brightness') | int(1) }}
-              step_brightness: >-
-                {{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}
-              new_brightness: >-
-                {{ [current_brightness - step_brightness, 1] | max }}
+              current_brightness: "{{ state_attr(first_on_light, 'brightness') | int(1) }}"
+              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
+              new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -224,14 +228,10 @@ action:
           - repeat:
               sequence:
                 - variables:
-                    first_light: >-
-                      {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
-                    current_brightness: >-
-                      {{ state_attr(first_light, 'brightness') | int(0) }}
-                    step_brightness: >-
-                      {{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}
-                    new_brightness: >-
-                      {{ [current_brightness + step_brightness, 255] | min }}
+                    first_light: "{{ expand(target_lights) | map(attribute='entity_id') | list | first }}"
+                    current_brightness: "{{ state_attr(first_light, 'brightness') | int(0) }}"
+                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
+                    new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
@@ -239,8 +239,8 @@ action:
                     brightness: "{{ new_brightness }}"
                 - wait_for_trigger:
                     - platform: mqtt
-                      topic: zigbee2mqtt/ph_controle_01
-                      payload: up_hold_release
+                      topic: "{{ mqtt_topic }}"
+                      payload: "up_hold_release"
                       value_template: "{{ value_json.action }}"
                   timeout:
                     milliseconds: !input hold_delay_ms
@@ -271,12 +271,9 @@ action:
                          | map(attribute='entity_id')
                          | list
                          | first }}
-                    current_brightness: >-
-                      {{ state_attr(loop_first_on_light, 'brightness') | int(1) }}
-                    step_brightness: >-
-                      {{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}
-                    new_brightness: >-
-                      {{ [current_brightness - step_brightness, 1] | max }}
+                    current_brightness: "{{ state_attr(loop_first_on_light, 'brightness') | int(1) }}"
+                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
+                    new_brightness: "{{ [current_brightness - step_brightness, 1] | max }}"
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
@@ -284,8 +281,8 @@ action:
                     brightness: "{{ new_brightness }}"
                 - wait_for_trigger:
                     - platform: mqtt
-                      topic: zigbee2mqtt/ph_controle_01
-                      payload: down_hold_release
+                      topic: "{{ mqtt_topic }}"
+                      payload: "down_hold_release"
                       value_template: "{{ value_json.action }}"
                   timeout:
                     milliseconds: !input hold_delay_ms
