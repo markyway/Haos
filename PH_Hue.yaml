@@ -1,24 +1,23 @@
 blueprint:
-  name: Philips Hue Dimmer v2 - Simple Lights + Scene Cycle (Zigbee2MQTT)
+  name: Philips Hue Dimmer v2 - Simple STYRBAR Style (Zigbee2MQTT)
   description: >
     Simple Philips Hue Dimmer v2 blueprint for Zigbee2MQTT.
 
-    Power button:
-    - single press = toggle lights on/off
-    - double press = toggle warm/cold white
+    Select the remote ACTION SENSOR entity (for example sensor.hue_dimmer_action).
 
-    Brightness up/down:
-    - short press = brightness step
-    - hold = repeat until release
-
-    Hue button:
-    - cycles through selected Home Assistant scenes
+    Buttons:
+    - Power button single press: toggle lights on/off
+    - Power button double press: toggle warm/cold white
+    - Brightness up/down short press: step brightness
+    - Brightness up/down hold: keep dimming until release
+    - Hue button: cycle through built-in color scenes using an input_number helper
 
   domain: automation
+
   input:
-    remote_action_sensor:
-      name: Remote action sensor
-      description: Select the Zigbee2MQTT action sensor for the Hue dimmer.
+    remote:
+      name: Remote
+      description: Select the Zigbee2MQTT action sensor of the Hue dimmer.
       selector:
         entity:
           domain: sensor
@@ -30,18 +29,9 @@ blueprint:
           domain: light
           multiple: true
 
-    color_scenes:
-      name: Color scenes
-      description: Scenes to cycle through with the Hue button.
-      default: []
-      selector:
-        entity:
-          domain: scene
-          multiple: true
-
     scene_index_helper:
       name: Scene index helper
-      description: Input Number helper used to remember the next scene.
+      description: Input Number helper used to remember the current color scene index.
       selector:
         entity:
           domain: input_number
@@ -106,13 +96,12 @@ blueprint:
           step: 10
           unit_of_measurement: ms
 
-mode: single
+mode: restart
 max_exceeded: silent
 
 variables:
-  remote_action_sensor: !input remote_action_sensor
+  remote: !input remote
   target_lights: !input target_lights
-  color_scenes: !input color_scenes
   scene_index_helper: !input scene_index_helper
   short_step_pct: !input short_step_pct
   hold_step_pct: !input hold_step_pct
@@ -122,37 +111,37 @@ variables:
 
 trigger:
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "on_press"
     id: power_press
 
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "up_press"
     id: up_press
 
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "up_hold"
     id: up_hold
 
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "down_press"
     id: down_press
 
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "down_hold"
     id: down_hold
 
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "recall_0"
     id: hue_scene
 
   - platform: state
-    entity_id: !input remote_action_sensor
+    entity_id: !input remote
     to: "recall_1"
     id: hue_scene
 
@@ -166,7 +155,7 @@ action:
         sequence:
           - wait_for_trigger:
               - platform: state
-                entity_id: !input remote_action_sensor
+                entity_id: !input remote
                 to: "on_press"
             timeout:
               milliseconds: !input double_tap_window_ms
@@ -194,6 +183,7 @@ action:
                       entity_id: !input target_lights
                     data:
                       kelvin: "{{ target_kelvin | int }}"
+
               - conditions:
                   - condition: template
                     value_template: "{{ wait.trigger is none }}"
@@ -229,7 +219,7 @@ action:
           - repeat:
               while:
                 - condition: template
-                  value_template: "{{ states(remote_action_sensor) == 'up_hold' }}"
+                  value_template: "{{ states(remote) == 'up_hold' }}"
               sequence:
                 - action: light.turn_on
                   target:
@@ -246,7 +236,7 @@ action:
           - repeat:
               while:
                 - condition: template
-                  value_template: "{{ states(remote_action_sensor) == 'down_hold' }}"
+                  value_template: "{{ states(remote) == 'down_hold' }}"
               sequence:
                 - action: light.turn_on
                   target:
@@ -261,30 +251,77 @@ action:
             id: hue_scene
         sequence:
           - variables:
-              scene_count: "{{ color_scenes | count }}"
               current_index: "{{ states(scene_index_helper) | int(0) }}"
-              scene_to_activate: >-
-                {% if (color_scenes | count) > 0 %}
-                  {{ color_scenes[current_index % (color_scenes | count)] }}
-                {% else %}
-                  none
-                {% endif %}
-              next_index: >-
-                {% if (color_scenes | count) > 0 %}
-                  {{ (current_index + 1) % (color_scenes | count) }}
-                {% else %}
-                  0
-                {% endif %}
+              color_index: "{{ current_index % 6 }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ color_index | int == 0 }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      kelvin: 2200
+                      brightness_pct: 100
 
-          - condition: template
-            value_template: "{{ scene_count | int > 0 }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ color_index | int == 1 }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      kelvin: 6500
+                      brightness_pct: 100
 
-          - action: scene.turn_on
-            target:
-              entity_id: "{{ scene_to_activate }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ color_index | int == 2 }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      rgb_color: [255, 140, 60]
+                      brightness_pct: 100
+
+              - conditions:
+                  - condition: template
+                    value_template: "{{ color_index | int == 3 }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      rgb_color: [255, 70, 70]
+                      brightness_pct: 100
+
+              - conditions:
+                  - condition: template
+                    value_template: "{{ color_index | int == 4 }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      rgb_color: [70, 200, 255]
+                      brightness_pct: 100
+
+              - conditions:
+                  - condition: template
+                    value_template: "{{ color_index | int == 5 }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      rgb_color: [180, 90, 255]
+                      brightness_pct: 100
 
           - action: input_number.set_value
             target:
               entity_id: !input scene_index_helper
             data:
-              value: "{{ next_index }}"
+              value: "{{ (current_index + 1) % 6 }}"
