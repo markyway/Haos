@@ -1,13 +1,6 @@
 blueprint:
-  name: Philips Hue Dimmer v2 - Simple Toggle + Color Cycle
-  description: >-
-    Simple Philips Hue Dimmer blueprint for Zigbee2MQTT.
-
-    - On button: toggle lights
-    - Off button: toggle lights
-    - Up/Down short press: brightness step
-    - Up/Down hold: keep dimming until release
-    - Hue button: cycle through configurable colors
+  name: Philips Hue Dimmer v2 Simple
+  description: "Simple Philips Hue Dimmer blueprint for Zigbee2MQTT"
   domain: automation
 
   input:
@@ -123,66 +116,52 @@ variables:
   short_step_pct: !input short_step_pct
   hold_step_pct: !input hold_step_pct
 
-triggers:
-  - trigger: device
+trigger:
+  - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
     subtype: on_press_release
     id: toggle
 
-  - trigger: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: off_press_release
-    id: toggle
-
-  - trigger: device
+  - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
     subtype: up_press_release
     id: up_press
 
-  - trigger: device
+  - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
     subtype: down_press_release
     id: down_press
 
-  - trigger: device
+  - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
     subtype: up_hold
     id: up_hold
 
-  - trigger: device
+  - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
     subtype: down_hold
     id: down_hold
 
-  - trigger: device
+  - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
-    subtype: recall_0
+    subtype: off_press_release
     id: hue_cycle
 
-  - trigger: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: recall_1
-    id: hue_cycle
+condition: []
 
-conditions: []
-
-actions:
+action:
   - choose:
       - conditions:
           - condition: trigger
@@ -258,7 +237,7 @@ actions:
                   data:
                     brightness: "{{ new_brightness }}"
                 - wait_for_trigger:
-                    - trigger: device
+                    - platform: device
                       domain: mqtt
                       device_id: !input remote_device
                       type: action
@@ -304,7 +283,7 @@ actions:
                   data:
                     brightness: "{{ new_brightness }}"
                 - wait_for_trigger:
-                    - trigger: device
+                    - platform: device
                       domain: mqtt
                       device_id: !input remote_device
                       type: action
