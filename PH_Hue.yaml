@@ -1,14 +1,9 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple MQTT
+  name: Philips Hue Dimmer v2 Simple
   description: Simple Philips Hue Dimmer blueprint for Zigbee2MQTT
   domain: automation
 
   input:
-    mqtt_topic:
-      name: Zigbee2MQTT topic
-      selector:
-        text:
-
     target_lights:
       name: Target lights
       selector:
@@ -118,50 +113,50 @@ variables:
 
 trigger:
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "on_press_release"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: on_press_release
     value_template: "{{ value_json.action }}"
     id: on_toggle
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "off_press_release"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: off_press_release
     value_template: "{{ value_json.action }}"
     id: off_toggle
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "up_press_release"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: up_press_release
     value_template: "{{ value_json.action }}"
     id: up_press
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "down_press_release"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: down_press_release
     value_template: "{{ value_json.action }}"
     id: down_press
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "up_hold"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: up_hold
     value_template: "{{ value_json.action }}"
     id: up_hold
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "down_hold"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: down_hold
     value_template: "{{ value_json.action }}"
     id: down_hold
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "recall_0"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: recall_0
     value_template: "{{ value_json.action }}"
     id: hue_cycle
 
   - platform: mqtt
-    topic: !input mqtt_topic
-    payload: "recall_1"
+    topic: zigbee2mqtt/ph_controle_01
+    payload: recall_1
     value_template: "{{ value_json.action }}"
     id: hue_cycle
 
@@ -169,15 +164,9 @@ action:
   - choose:
       - conditions:
           - condition: trigger
-            id: on_toggle
-        sequence:
-          - service: light.toggle
-            target:
-              entity_id: !input target_lights
-
-      - conditions:
-          - condition: trigger
-            id: off_toggle
+            id:
+              - on_toggle
+              - off_toggle
         sequence:
           - service: light.toggle
             target:
@@ -250,8 +239,8 @@ action:
                     brightness: "{{ new_brightness }}"
                 - wait_for_trigger:
                     - platform: mqtt
-                      topic: !input mqtt_topic
-                      payload: "up_hold_release"
+                      topic: zigbee2mqtt/ph_controle_01
+                      payload: up_hold_release
                       value_template: "{{ value_json.action }}"
                   timeout:
                     milliseconds: !input hold_delay_ms
@@ -295,8 +284,8 @@ action:
                     brightness: "{{ new_brightness }}"
                 - wait_for_trigger:
                     - platform: mqtt
-                      topic: !input mqtt_topic
-                      payload: "down_hold_release"
+                      topic: zigbee2mqtt/ph_controle_01
+                      payload: down_hold_release
                       value_template: "{{ value_json.action }}"
                   timeout:
                     milliseconds: !input hold_delay_ms
