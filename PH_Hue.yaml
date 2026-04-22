@@ -1,6 +1,6 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple Stable ++
-  description: "Stable Philips Hue Dimmer blueprint for Zigbee2MQTT with color cycle, color temperature sweep, and minimum brightness protection"
+  name: Philips Hue Dimmer v2 Simple Stable Optimized
+  description: Optimized Philips Hue Dimmer blueprint for Zigbee2MQTT
   domain: automation
 
   input:
@@ -283,26 +283,26 @@ action:
             id: up_press
         sequence:
           - variables:
-              reference_light: >-
-                {% set on_lights = expand(target_lights)
-                  | selectattr('state', 'eq', 'on')
-                  | map(attribute='entity_id')
-                  | list %}
-                {% if on_lights | count > 0 %}
-                  {{ on_lights | first }}
-                {% else %}
-                  {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
-                {% endif %}
-              current_pct: >-
-                {{ ((state_attr(reference_light, 'brightness') | int(0)) / 2.55) | round(0) | int }}
-              new_pct: >-
-                {{ [current_pct + (short_step_pct | int), 100] | min }}
-          - service: light.turn_on
-            target:
-              entity_id: !input target_lights
-            data:
-              brightness_pct: "{{ new_pct }}"
-              transition: 0
+              any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+              start_pct: "{{ [short_step_pct | int, min_brightness_pct | int] | max }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ any_on }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      brightness_step_pct: "{{ short_step_pct | int }}"
+                      transition: 0
+            default:
+              - service: light.turn_on
+                target:
+                  entity_id: !input target_lights
+                data:
+                  brightness_pct: "{{ start_pct }}"
+                  transition: 0
 
       - conditions:
           - condition: trigger
@@ -320,41 +320,40 @@ action:
           - variables:
               current_pct: >-
                 {{ ((state_attr(first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
-              new_pct: >-
+              target_pct: >-
                 {{ [current_pct - (short_step_pct | int), min_brightness_pct | int] | max }}
           - service: light.turn_on
             target:
               entity_id: !input target_lights
             data:
-              brightness_pct: "{{ new_pct }}"
+              brightness_pct: "{{ target_pct }}"
               transition: 0
 
       - conditions:
           - condition: trigger
             id: up_hold
         sequence:
+          - variables:
+              any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+              start_pct: "{{ [min_brightness_pct | int, hold_step_pct | int] | max }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not any_on }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      brightness_pct: "{{ start_pct }}"
+                      transition: 0
           - repeat:
               sequence:
-                - variables:
-                    reference_light: >-
-                      {% set on_lights = expand(target_lights)
-                        | selectattr('state', 'eq', 'on')
-                        | map(attribute='entity_id')
-                        | list %}
-                      {% if on_lights | count > 0 %}
-                        {{ on_lights | first }}
-                      {% else %}
-                        {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
-                      {% endif %}
-                    current_pct: >-
-                      {{ ((state_attr(reference_light, 'brightness') | int(0)) / 2.55) | round(0) | int }}
-                    new_pct: >-
-                      {{ [current_pct + (hold_step_pct | int), 100] | min }}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
-                    brightness_pct: "{{ new_pct }}"
+                    brightness_step_pct: "{{ hold_step_pct | int }}"
                     transition: 0
                 - wait_for_trigger:
                     - platform: device
@@ -393,13 +392,13 @@ action:
                          | first }}
                     current_pct: >-
                       {{ ((state_attr(loop_first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
-                    new_pct: >-
+                    target_pct: >-
                       {{ [current_pct - (hold_step_pct | int), min_brightness_pct | int] | max }}
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
-                    brightness_pct: "{{ new_pct }}"
+                    brightness_pct: "{{ target_pct }}"
                     transition: 0
                 - wait_for_trigger:
                     - platform: device
