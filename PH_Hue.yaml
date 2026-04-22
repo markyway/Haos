@@ -234,17 +234,47 @@ action:
           - condition: trigger
             id: toggle
         sequence:
-          - service: light.toggle
-            target:
-              entity_id: !input target_lights
+          - variables:
+              any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ any_on }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      transition: 0
+            default:
+              - service: light.turn_on
+                target:
+                  entity_id: !input target_lights
+                data:
+                  transition: 0
 
       - conditions:
           - condition: trigger
             id: off_toggle
         sequence:
-          - service: light.toggle
-            target:
-              entity_id: !input target_lights
+          - variables:
+              any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ any_on }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input target_lights
+                    data:
+                      transition: 0
+            default:
+              - service: light.turn_on
+                target:
+                  entity_id: !input target_lights
+                data:
+                  transition: 0
 
       - conditions:
           - condition: trigger
