@@ -1,16 +1,8 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple Stable
-  description: >
-    Philips Hue Dimmer v2 for Zigbee2MQTT.
-
-    - On press release: toggle lights
-    - On hold: ping-pong color temperature warm to cold until release
-    - Up press: brighten
-    - Down press: dim, but never below 10%
-    - Up hold: brighten smoothly
-    - Down hold: dim smoothly, but never below 10%
-    - Off press release: cycle colors
+  name: Philips Hue Dimmer v2 Simple Stable Final
+  description: Stable Philips Hue Dimmer blueprint for Zigbee2MQTT
   domain: automation
+
   input:
     remote_device:
       name: Remote device
@@ -67,6 +59,16 @@ blueprint:
       selector:
         number:
           min: 80
+          max: 1000
+          step: 10
+          unit_of_measurement: ms
+
+    on_button_decision_ms:
+      name: On button tap/hold decision time
+      default: 550
+      selector:
+        number:
+          min: 250
           max: 1000
           step: 10
           unit_of_measurement: ms
@@ -182,15 +184,8 @@ trigger:
     domain: mqtt
     device_id: !input remote_device
     type: action
-    subtype: on_press_release
-    id: toggle
-
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: on_hold
-    id: ct_cycle
+    subtype: on_press
+    id: on_button
 
   - platform: device
     domain: mqtt
@@ -231,58 +226,85 @@ action:
   - choose:
       - conditions:
           - condition: trigger
-            id: toggle
+            id: on_button
         sequence:
-          - service: light.toggle
-            target:
-              entity_id: !input target_lights
+          - wait_for_trigger:
+              - platform: device
+                domain: mqtt
+                device_id: !input remote_device
+                type: action
+                subtype: on_hold
+                id: hold
+              - platform: device
+                domain: mqtt
+                device_id: !input remote_device
+                type: action
+                subtype: on_press_release
+                id: tap
+            timeout:
+              milliseconds: !input on_button_decision_ms
+            continue_on_timeout: true
 
-      - conditions:
-          - condition: trigger
-            id: ct_cycle
-        sequence:
-          - repeat:
-              sequence:
-                - variables:
-                    step_count: "{{ [ct_steps | int, 2] | max }}"
-                    max_index: "{{ step_count - 1 }}"
-                    phase: "{{ (repeat.index - 1) % (max_index * 2) }}"
-                    step_index: >-
-                      {% set m = max_index | int %}
-                      {% set p = phase | int %}
-                      {% if p <= m %}
-                        {{ p }}
-                      {% else %}
-                        {{ (m * 2) - p }}
-                      {% endif %}
-                    kelvin_value: >-
-                      {% set warm = warm_kelvin | int %}
-                      {% set cold = cold_kelvin | int %}
-                      {% set m = max_index | int %}
-                      {% set idx = step_index | int %}
-                      {% if m <= 0 %}
-                        {{ warm }}
-                      {% else %}
-                        {{ (warm + ((cold - warm) * idx / m)) | round(0) | int }}
-                      {% endif %}
-                - service: light.turn_on
-                  target:
-                    entity_id: !input target_lights
-                  data:
-                    color_temp_kelvin: "{{ kelvin_value }}"
-                    transition: 0
-                - wait_for_trigger:
-                    - platform: device
-                      domain: mqtt
-                      device_id: !input remote_device
-                      type: action
-                      subtype: on_hold_release
-                  timeout:
-                    milliseconds: !input ct_delay_ms
-                  continue_on_timeout: true
-              until:
-                - condition: template
-                  value_template: "{{ wait.trigger is not none }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ wait.trigger is not none and wait.trigger.id == 'hold' }}"
+                sequence:
+                  - repeat:
+                      sequence:
+                        - variables:
+                            step_count: "{{ [ct_steps | int, 2] | max }}"
+                            max_index: "{{ step_count - 1 }}"
+                            phase: "{{ (repeat.index - 1) % (max_index * 2) }}"
+                            step_index: >-
+                              {% set m = max_index | int %}
+                              {% set p = phase | int %}
+                              {% if p <= m %}
+                                {{ p }}
+                              {% else %}
+                                {{ (m * 2) - p }}
+                              {% endif %}
+                            kelvin_value: >-
+                              {% set warm = warm_kelvin | int %}
+                              {% set cold = cold_kelvin | int %}
+                              {% set m = max_index | int %}
+                              {% set idx = step_index | int %}
+                              {% if m <= 0 %}
+                                {{ warm }}
+                              {% else %}
+                                {{ (warm + ((cold - warm) * idx / m)) | round(0) | int }}
+                              {% endif %}
+                        - service: light.turn_on
+                          target:
+                            entity_id: !input target_lights
+                          data:
+                            color_temp_kelvin: "{{ kelvin_value }}"
+                            transition: 0
+                        - wait_for_trigger:
+                            - platform: device
+                              domain: mqtt
+                              device_id: !input remote_device
+                              type: action
+                              subtype: on_hold_release
+                          timeout:
+                            milliseconds: !input ct_delay_ms
+                          continue_on_timeout: true
+                      until:
+                        - condition: template
+                          value_template: "{{ wait.trigger is not none }}"
+
+              - conditions:
+                  - condition: template
+                    value_template: "{{ wait.trigger is not none and wait.trigger.id == 'tap' }}"
+                sequence:
+                  - service: light.toggle
+                    target:
+                      entity_id: !input target_lights
+
+            default:
+              - service: light.toggle
+                target:
+                  entity_id: !input target_lights
 
       - conditions:
           - condition: trigger
@@ -436,6 +458,7 @@ action:
                     data:
                       rgb_color: !input color_0
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 1 }}"
@@ -446,6 +469,7 @@ action:
                     data:
                       rgb_color: !input color_1
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 2 }}"
@@ -456,6 +480,7 @@ action:
                     data:
                       rgb_color: !input color_2
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 3 }}"
@@ -466,6 +491,7 @@ action:
                     data:
                       rgb_color: !input color_3
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 4 }}"
@@ -476,6 +502,7 @@ action:
                     data:
                       rgb_color: !input color_4
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 5 }}"
@@ -486,6 +513,7 @@ action:
                     data:
                       rgb_color: !input color_5
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 6 }}"
@@ -496,6 +524,7 @@ action:
                     data:
                       rgb_color: !input color_6
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 7 }}"
@@ -506,6 +535,7 @@ action:
                     data:
                       rgb_color: !input color_7
                       transition: 0
+
               - conditions:
                   - condition: template
                     value_template: "{{ color_index | int == 8 }}"
@@ -516,6 +546,7 @@ action:
                     data:
                       rgb_color: !input color_8
                       transition: 0
+
           - service: input_number.set_value
             target:
               entity_id: !input color_index_helper
