@@ -1,225 +1,64 @@
-blueprint:
-  name: Philips Hue Dimmer v2 Simple Stable Optimized
-  description: Optimized Philips Hue Dimmer blueprint for Zigbee2MQTT
-  domain: automation
-
-  input:
-    remote_device:
-      name: Remote device
-      selector:
-        device:
-          integration: mqtt
-
-    target_lights:
-      name: Target lights
-      selector:
-        entity:
-          domain: light
-          multiple: true
-
-    color_index_helper:
-      name: Color index helper
-      selector:
-        entity:
-          domain: input_number
-
-    short_step_pct:
-      name: Brightness step %
-      default: 12
-      selector:
-        number:
-          min: 1
-          max: 50
-          step: 1
-          unit_of_measurement: "%"
-
-    hold_step_pct:
-      name: Hold brightness step %
-      default: 15
-      selector:
-        number:
-          min: 1
-          max: 50
-          step: 1
-          unit_of_measurement: "%"
-
-    min_brightness_pct:
-      name: Minimum brightness %
-      default: 10
-      selector:
-        number:
-          min: 1
-          max: 50
-          step: 1
-          unit_of_measurement: "%"
-
-    hold_delay_ms:
-      name: Hold brightness speed
-      default: 140
-      selector:
-        number:
-          min: 80
-          max: 1000
-          step: 10
-          unit_of_measurement: ms
-
-    warm_kelvin:
-      name: Warm color temperature
-      default: 2200
-      selector:
-        number:
-          min: 1800
-          max: 4000
-          step: 100
-          unit_of_measurement: K
-
-    cold_kelvin:
-      name: Cold color temperature
-      default: 6500
-      selector:
-        number:
-          min: 3000
-          max: 7000
-          step: 100
-          unit_of_measurement: K
-
-    ct_steps:
-      name: Color temperature steps
-      default: 12
-      selector:
-        number:
-          min: 2
-          max: 50
-          step: 1
-
-    ct_delay_ms:
-      name: Color temperature speed
-      default: 260
-      selector:
-        number:
-          min: 80
-          max: 1500
-          step: 10
-          unit_of_measurement: ms
-
-    color_0:
-      name: Color 0
-      default: [255, 255, 255]
-      selector:
-        color_rgb:
-
-    color_1:
-      name: Color 1
-      default: [245, 245, 80]
-      selector:
-        color_rgb:
-
-    color_2:
-      name: Color 2
-      default: [255, 179, 44]
-      selector:
-        color_rgb:
-
-    color_3:
-      name: Color 3
-      default: [255, 80, 40]
-      selector:
-        color_rgb:
-
-    color_4:
-      name: Color 4
-      default: [235, 60, 120]
-      selector:
-        color_rgb:
-
-    color_5:
-      name: Color 5
-      default: [160, 50, 255]
-      selector:
-        color_rgb:
-
-    color_6:
-      name: Color 6
-      default: [40, 60, 255]
-      selector:
-        color_rgb:
-
-    color_7:
-      name: Color 7
-      default: [45, 110, 170]
-      selector:
-        color_rgb:
-
-    color_8:
-      name: Color 8
-      default: [110, 235, 70]
-      selector:
-        color_rgb:
-
+alias: Philips Hue Dimmer Hardcoded Stable
+description: Hardcoded fast automation for Philips Hue Dimmer RWL022 on Zigbee2MQTT
 mode: restart
 max_exceeded: silent
 
 variables:
-  target_lights: !input target_lights
-  color_index_helper: !input color_index_helper
-  short_step_pct: !input short_step_pct
-  hold_step_pct: !input hold_step_pct
-  min_brightness_pct: !input min_brightness_pct
-  warm_kelvin: !input warm_kelvin
-  cold_kelvin: !input cold_kelvin
-  ct_steps: !input ct_steps
+  target_lights: light.your_light_group
+  color_helper: input_number.hue_dimmer_color_index
+
+  min_brightness_pct: 10
+  tap_step_pct: 10
+  hold_step_pct: 6
+  hold_delay_ms: 140
+
+  warm_kelvin: 2200
+  cold_kelvin: 6500
+  ct_steps: 18
+  ct_delay_ms: 220
 
 trigger:
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: on_press_release
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: on_press_release
+    value_template: "{{ value_json.action }}"
     id: toggle
 
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: on_hold
-    id: ct_cycle
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: on_hold
+    value_template: "{{ value_json.action }}"
+    id: ct_hold
 
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: up_press_release
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: up_press
+    value_template: "{{ value_json.action }}"
     id: up_press
 
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: down_press_release
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: down_press
+    value_template: "{{ value_json.action }}"
     id: down_press
 
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: up_hold
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: up_hold
+    value_template: "{{ value_json.action }}"
     id: up_hold
 
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: down_hold
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: down_hold
+    value_template: "{{ value_json.action }}"
     id: down_hold
 
-  - platform: device
-    domain: mqtt
-    device_id: !input remote_device
-    type: action
-    subtype: off_press_release
-    id: hue_cycle
-
-condition: []
+  - platform: mqtt
+    topic: zigbee2mqtt/ph_controle_01
+    payload: off_press
+    value_template: "{{ value_json.action }}"
+    id: hue_press
 
 action:
   - choose:
@@ -229,11 +68,11 @@ action:
         sequence:
           - service: light.toggle
             target:
-              entity_id: !input target_lights
+              entity_id: "{{ target_lights }}"
 
       - conditions:
           - condition: trigger
-            id: ct_cycle
+            id: ct_hold
         sequence:
           - repeat:
               sequence:
@@ -261,18 +100,17 @@ action:
                       {% endif %}
                 - service: light.turn_on
                   target:
-                    entity_id: !input target_lights
+                    entity_id: "{{ target_lights }}"
                   data:
                     color_temp_kelvin: "{{ kelvin_value }}"
                     transition: 0
                 - wait_for_trigger:
-                    - platform: device
-                      domain: mqtt
-                      device_id: !input remote_device
-                      type: action
-                      subtype: on_hold_release
+                    - platform: mqtt
+                      topic: zigbee2mqtt/ph_controle_01
+                      payload: on_hold_release
+                      value_template: "{{ value_json.action }}"
                   timeout:
-                    milliseconds: !input ct_delay_ms
+                    milliseconds: "{{ ct_delay_ms }}"
                   continue_on_timeout: true
               until:
                 - condition: template
@@ -284,7 +122,6 @@ action:
         sequence:
           - variables:
               any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
-              start_pct: "{{ [short_step_pct | int, min_brightness_pct | int] | max }}"
           - choose:
               - conditions:
                   - condition: template
@@ -292,16 +129,16 @@ action:
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      brightness_step_pct: "{{ short_step_pct | int }}"
+                      brightness_step_pct: "{{ tap_step_pct }}"
                       transition: 0
             default:
               - service: light.turn_on
                 target:
-                  entity_id: !input target_lights
+                  entity_id: "{{ target_lights }}"
                 data:
-                  brightness_pct: "{{ start_pct }}"
+                  brightness_pct: "{{ [tap_step_pct, min_brightness_pct] | max }}"
                   transition: 0
 
       - conditions:
@@ -321,10 +158,10 @@ action:
               current_pct: >-
                 {{ ((state_attr(first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
               target_pct: >-
-                {{ [current_pct - (short_step_pct | int), min_brightness_pct | int] | max }}
+                {{ [current_pct - tap_step_pct, min_brightness_pct] | max }}
           - service: light.turn_on
             target:
-              entity_id: !input target_lights
+              entity_id: "{{ target_lights }}"
             data:
               brightness_pct: "{{ target_pct }}"
               transition: 0
@@ -335,7 +172,6 @@ action:
         sequence:
           - variables:
               any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
-              start_pct: "{{ [min_brightness_pct | int, hold_step_pct | int] | max }}"
           - choose:
               - conditions:
                   - condition: template
@@ -343,26 +179,25 @@ action:
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      brightness_pct: "{{ start_pct }}"
+                      brightness_pct: "{{ [min_brightness_pct + hold_step_pct, 100] | min }}"
                       transition: 0
           - repeat:
               sequence:
                 - service: light.turn_on
                   target:
-                    entity_id: !input target_lights
+                    entity_id: "{{ target_lights }}"
                   data:
-                    brightness_step_pct: "{{ hold_step_pct | int }}"
+                    brightness_step_pct: "{{ hold_step_pct }}"
                     transition: 0
                 - wait_for_trigger:
-                    - platform: device
-                      domain: mqtt
-                      device_id: !input remote_device
-                      type: action
-                      subtype: up_hold_release
+                    - platform: mqtt
+                      topic: zigbee2mqtt/ph_controle_01
+                      payload: up_hold_release
+                      value_template: "{{ value_json.action }}"
                   timeout:
-                    milliseconds: !input hold_delay_ms
+                    milliseconds: "{{ hold_delay_ms }}"
                   continue_on_timeout: true
               until:
                 - condition: template
@@ -384,30 +219,29 @@ action:
           - repeat:
               sequence:
                 - variables:
-                    loop_first_on_light: >-
+                    loop_light: >-
                       {{ expand(target_lights)
                          | selectattr('state', 'eq', 'on')
                          | map(attribute='entity_id')
                          | list
                          | first }}
                     current_pct: >-
-                      {{ ((state_attr(loop_first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
+                      {{ ((state_attr(loop_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
                     target_pct: >-
-                      {{ [current_pct - (hold_step_pct | int), min_brightness_pct | int] | max }}
+                      {{ [current_pct - hold_step_pct, min_brightness_pct] | max }}
                 - service: light.turn_on
                   target:
-                    entity_id: !input target_lights
+                    entity_id: "{{ target_lights }}"
                   data:
                     brightness_pct: "{{ target_pct }}"
                     transition: 0
                 - wait_for_trigger:
-                    - platform: device
-                      domain: mqtt
-                      device_id: !input remote_device
-                      type: action
-                      subtype: down_hold_release
+                    - platform: mqtt
+                      topic: zigbee2mqtt/ph_controle_01
+                      payload: down_hold_release
+                      value_template: "{{ value_json.action }}"
                   timeout:
-                    milliseconds: !input hold_delay_ms
+                    milliseconds: "{{ hold_delay_ms }}"
                   continue_on_timeout: true
               until:
                 - condition: template
@@ -415,114 +249,113 @@ action:
 
       - conditions:
           - condition: trigger
-            id: hue_cycle
+            id: hue_press
         sequence:
           - variables:
-              current_index: "{{ states(color_index_helper) | int(0) }}"
+              current_index: "{{ states(color_helper) | int(0) }}"
               color_index: "{{ current_index % 9 }}"
-
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 0 }}"
+                    value_template: "{{ color_index == 0 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_0
+                      rgb_color: [255, 255, 255]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 1 }}"
+                    value_template: "{{ color_index == 1 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_1
+                      rgb_color: [245, 245, 80]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 2 }}"
+                    value_template: "{{ color_index == 2 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_2
+                      rgb_color: [255, 179, 44]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 3 }}"
+                    value_template: "{{ color_index == 3 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_3
+                      rgb_color: [255, 80, 40]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 4 }}"
+                    value_template: "{{ color_index == 4 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_4
+                      rgb_color: [235, 60, 120]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 5 }}"
+                    value_template: "{{ color_index == 5 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_5
+                      rgb_color: [160, 50, 255]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 6 }}"
+                    value_template: "{{ color_index == 6 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_6
+                      rgb_color: [40, 60, 255]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 7 }}"
+                    value_template: "{{ color_index == 7 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_7
+                      rgb_color: [45, 110, 170]
                       transition: 0
 
               - conditions:
                   - condition: template
-                    value_template: "{{ color_index | int == 8 }}"
+                    value_template: "{{ color_index == 8 }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: !input target_lights
+                      entity_id: "{{ target_lights }}"
                     data:
-                      rgb_color: !input color_8
+                      rgb_color: [110, 235, 70]
                       transition: 0
 
           - service: input_number.set_value
             target:
-              entity_id: !input color_index_helper
+              entity_id: "{{ color_helper }}"
             data:
               value: "{{ (current_index + 1) % 9 }}"
