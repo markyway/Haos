@@ -1,6 +1,6 @@
 blueprint:
-  name: Philips Hue Dimmer v2 Simple Stable Final
-  description: Stable Philips Hue Dimmer blueprint for Zigbee2MQTT
+  name: Philips Hue Dimmer v2 - Back to Working
+  description: Stable simple Philips Hue Dimmer blueprint for Zigbee2MQTT
   domain: automation
 
   input:
@@ -25,7 +25,7 @@ blueprint:
 
     short_step_pct:
       name: Brightness step %
-      default: 10
+      default: 12
       selector:
         number:
           min: 1
@@ -35,7 +35,7 @@ blueprint:
 
     hold_step_pct:
       name: Hold brightness step %
-      default: 6
+      default: 20
       selector:
         number:
           min: 1
@@ -55,20 +55,10 @@ blueprint:
 
     hold_delay_ms:
       name: Hold brightness speed
-      default: 140
+      default: 180
       selector:
         number:
-          min: 80
-          max: 1000
-          step: 10
-          unit_of_measurement: ms
-
-    on_button_decision_ms:
-      name: On button tap/hold decision time
-      default: 550
-      selector:
-        number:
-          min: 250
+          min: 100
           max: 1000
           step: 10
           unit_of_measurement: ms
@@ -95,7 +85,7 @@ blueprint:
 
     ct_steps:
       name: Color temperature steps
-      default: 18
+      default: 12
       selector:
         number:
           min: 2
@@ -104,10 +94,10 @@ blueprint:
 
     ct_delay_ms:
       name: Color temperature speed
-      default: 220
+      default: 300
       selector:
         number:
-          min: 80
+          min: 100
           max: 1500
           step: 10
           unit_of_measurement: ms
@@ -184,21 +174,28 @@ trigger:
     domain: mqtt
     device_id: !input remote_device
     type: action
-    subtype: on_press
-    id: on_button
+    subtype: on_press_release
+    id: toggle
 
   - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
-    subtype: up_press
+    subtype: on_hold
+    id: ct_cycle
+
+  - platform: device
+    domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: up_press_release
     id: up_press
 
   - platform: device
     domain: mqtt
     device_id: !input remote_device
     type: action
-    subtype: down_press
+    subtype: down_press_release
     id: down_press
 
   - platform: device
@@ -222,115 +219,89 @@ trigger:
     subtype: off_press_release
     id: hue_cycle
 
+condition: []
+
 action:
   - choose:
       - conditions:
           - condition: trigger
-            id: on_button
+            id: toggle
         sequence:
-          - wait_for_trigger:
-              - platform: device
-                domain: mqtt
-                device_id: !input remote_device
-                type: action
-                subtype: on_hold
-                id: hold
-              - platform: device
-                domain: mqtt
-                device_id: !input remote_device
-                type: action
-                subtype: on_press_release
-                id: tap
-            timeout:
-              milliseconds: !input on_button_decision_ms
-            continue_on_timeout: true
+          - service: light.toggle
+            target:
+              entity_id: !input target_lights
 
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ wait.trigger is not none and wait.trigger.id == 'hold' }}"
-                sequence:
-                  - repeat:
-                      sequence:
-                        - variables:
-                            step_count: "{{ [ct_steps | int, 2] | max }}"
-                            max_index: "{{ step_count - 1 }}"
-                            phase: "{{ (repeat.index - 1) % (max_index * 2) }}"
-                            step_index: >-
-                              {% set m = max_index | int %}
-                              {% set p = phase | int %}
-                              {% if p <= m %}
-                                {{ p }}
-                              {% else %}
-                                {{ (m * 2) - p }}
-                              {% endif %}
-                            kelvin_value: >-
-                              {% set warm = warm_kelvin | int %}
-                              {% set cold = cold_kelvin | int %}
-                              {% set m = max_index | int %}
-                              {% set idx = step_index | int %}
-                              {% if m <= 0 %}
-                                {{ warm }}
-                              {% else %}
-                                {{ (warm + ((cold - warm) * idx / m)) | round(0) | int }}
-                              {% endif %}
-                        - service: light.turn_on
-                          target:
-                            entity_id: !input target_lights
-                          data:
-                            color_temp_kelvin: "{{ kelvin_value }}"
-                            transition: 0
-                        - wait_for_trigger:
-                            - platform: device
-                              domain: mqtt
-                              device_id: !input remote_device
-                              type: action
-                              subtype: on_hold_release
-                          timeout:
-                            milliseconds: !input ct_delay_ms
-                          continue_on_timeout: true
-                      until:
-                        - condition: template
-                          value_template: "{{ wait.trigger is not none }}"
-
-              - conditions:
-                  - condition: template
-                    value_template: "{{ wait.trigger is not none and wait.trigger.id == 'tap' }}"
-                sequence:
-                  - service: light.toggle
-                    target:
-                      entity_id: !input target_lights
-
-            default:
-              - service: light.toggle
-                target:
-                  entity_id: !input target_lights
+      - conditions:
+          - condition: trigger
+            id: ct_cycle
+        sequence:
+          - repeat:
+              sequence:
+                - variables:
+                    step_count: "{{ [ct_steps | int, 2] | max }}"
+                    max_index: "{{ step_count - 1 }}"
+                    phase: "{{ (repeat.index - 1) % (max_index * 2) }}"
+                    step_index: >-
+                      {% set m = max_index | int %}
+                      {% set p = phase | int %}
+                      {% if p <= m %}
+                        {{ p }}
+                      {% else %}
+                        {{ (m * 2) - p }}
+                      {% endif %}
+                    kelvin_value: >-
+                      {% set warm = warm_kelvin | int %}
+                      {% set cold = cold_kelvin | int %}
+                      {% set m = max_index | int %}
+                      {% set idx = step_index | int %}
+                      {% if m <= 0 %}
+                        {{ warm }}
+                      {% else %}
+                        {{ (warm + ((cold - warm) * idx / m)) | round(0) | int }}
+                      {% endif %}
+                - service: light.turn_on
+                  target:
+                    entity_id: !input target_lights
+                  data:
+                    color_temp_kelvin: "{{ kelvin_value }}"
+                    transition: 0
+                - wait_for_trigger:
+                    - platform: device
+                      domain: mqtt
+                      device_id: !input remote_device
+                      type: action
+                      subtype: on_hold_release
+                  timeout:
+                    milliseconds: !input ct_delay_ms
+                  continue_on_timeout: true
+              until:
+                - condition: template
+                  value_template: "{{ wait.trigger is not none }}"
 
       - conditions:
           - condition: trigger
             id: up_press
         sequence:
           - variables:
-              any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
-              start_pct: "{{ [short_step_pct | int, min_brightness_pct | int] | max }}"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ any_on }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      brightness_step_pct: "{{ short_step_pct | int }}"
-                      transition: 0
-            default:
-              - service: light.turn_on
-                target:
-                  entity_id: !input target_lights
-                data:
-                  brightness_pct: "{{ start_pct }}"
-                  transition: 0
+              reference_light: >-
+                {% set on_lights = expand(target_lights)
+                  | selectattr('state', 'eq', 'on')
+                  | map(attribute='entity_id')
+                  | list %}
+                {% if on_lights | count > 0 %}
+                  {{ on_lights | first }}
+                {% else %}
+                  {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
+                {% endif %}
+              current_brightness: "{{ state_attr(reference_light, 'brightness') | int(0) }}"
+              step_brightness: "{{ ((short_step_pct | float(0)) * 2.55) | round(0) | int }}"
+              new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
+          - service: light.turn_on
+            target:
+              entity_id: !input target_lights
+            data:
+              brightness: "{{ new_brightness }}"
+              transition: 0
 
       - conditions:
           - condition: trigger
@@ -346,10 +317,8 @@ action:
           - condition: template
             value_template: "{{ first_on_light is not none }}"
           - variables:
-              current_pct: >-
-                {{ ((state_attr(first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
-              target_pct: >-
-                {{ [current_pct - (short_step_pct | int), min_brightness_pct | int] | max }}
+              current_pct: "{{ ((state_attr(first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}"
+              target_pct: "{{ [current_pct - (short_step_pct | int), min_brightness_pct | int] | max }}"
           - service: light.turn_on
             target:
               entity_id: !input target_lights
@@ -361,26 +330,27 @@ action:
           - condition: trigger
             id: up_hold
         sequence:
-          - variables:
-              any_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ not any_on }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: !input target_lights
-                    data:
-                      brightness_pct: "{{ [min_brightness_pct | int + hold_step_pct | int, 100] | min }}"
-                      transition: 0
           - repeat:
               sequence:
+                - variables:
+                    reference_light: >-
+                      {% set on_lights = expand(target_lights)
+                        | selectattr('state', 'eq', 'on')
+                        | map(attribute='entity_id')
+                        | list %}
+                      {% if on_lights | count > 0 %}
+                        {{ on_lights | first }}
+                      {% else %}
+                        {{ expand(target_lights) | map(attribute='entity_id') | list | first }}
+                      {% endif %}
+                    current_brightness: "{{ state_attr(reference_light, 'brightness') | int(0) }}"
+                    step_brightness: "{{ ((hold_step_pct | float(0)) * 2.55) | round(0) | int }}"
+                    new_brightness: "{{ [current_brightness + step_brightness, 255] | min }}"
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
                   data:
-                    brightness_step_pct: "{{ hold_step_pct | int }}"
+                    brightness: "{{ new_brightness }}"
                     transition: 0
                 - wait_for_trigger:
                     - platform: device
@@ -411,16 +381,14 @@ action:
           - repeat:
               sequence:
                 - variables:
-                    loop_light: >-
+                    loop_first_on_light: >-
                       {{ expand(target_lights)
                          | selectattr('state', 'eq', 'on')
                          | map(attribute='entity_id')
                          | list
                          | first }}
-                    current_pct: >-
-                      {{ ((state_attr(loop_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}
-                    target_pct: >-
-                      {{ [current_pct - (hold_step_pct | int), min_brightness_pct | int] | max }}
+                    current_pct: "{{ ((state_attr(loop_first_on_light, 'brightness') | int(1)) / 2.55) | round(0) | int }}"
+                    target_pct: "{{ [current_pct - (hold_step_pct | int), min_brightness_pct | int] | max }}"
                 - service: light.turn_on
                   target:
                     entity_id: !input target_lights
@@ -447,6 +415,7 @@ action:
           - variables:
               current_index: "{{ states(color_index_helper) | int(0) }}"
               color_index: "{{ current_index % 9 }}"
+
           - choose:
               - conditions:
                   - condition: template
